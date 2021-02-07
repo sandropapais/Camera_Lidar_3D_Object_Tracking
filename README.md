@@ -8,6 +8,7 @@ This project encorporates
 5. Compute a time-to-collision (TTC) with objects based on Lidar measurements.
 6. Compute a time-to-collision (TTC) with objects based on Camera measurements.
 7. Tests different combinations of detectors and descrtiptors to find most suitable configuration.
+
 The overall project schematic is shown below based on Udacity SFND.
 
 <img src="images/course_code_structure.png" width="779" height="414" />
