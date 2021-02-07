@@ -1,4 +1,4 @@
-# SFND 3D Object Tracking
+# Camera and Lidar 3D Object Tracking
 
 This project encorporates
 1. Keypoint detectors, descriptors, and methods to match them between successive images
