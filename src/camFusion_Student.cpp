@@ -125,7 +125,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 
     // display image
     string windowName = "3D Objects";
-    cv::namedWindow(windowName, 1);
+    cv::namedWindow(windowName, cv::WINDOW_NORMAL); // WINDOW_NORMAL, WINDOW_AUTOSIZE, WINDOW_FULLSCREEN
     cv::imshow(windowName, topviewImg);
 
     if(bWait)
@@ -159,5 +159,35 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
 
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
 {
-    // ...
+    cv::Point2f posPrevKpt, posCurrKpt;
+    size_t bbCountPrev = prevFrame.boundingBoxes.size();
+    size_t bbCountCurr = currFrame.boundingBoxes.size();
+    int boxIDPrev = -1;
+    int boxIDCurr = -1;
+
+    // loop over all keypoint matches
+    for (auto it = matches.begin(); it != matches.end(); ++it)
+    {
+        posPrevKpt = prevFrame.keypoints[it->queryIdx].pt;
+        posCurrKpt = currFrame.keypoints[it->trainIdx].pt;
+
+        // check if points are inside any bbs
+        for (size_t i = 0; i < bbCountPrev; i++)
+        {
+            /* code */
+        }        
+        for (size_t i = 0; i < bbCountCurr; i++)
+        {
+            /* code */
+        }
+        
+        // If both matched kpts are inside bbs then store bb IDs in map
+        if( boxIDPrev >= 0 && boxIDCurr >= 0)
+        {
+            bbBestMatches.insert({boxIDPrev,boxIDCurr});
+        }
+
+        // Cout number of map pairs & sort in order of best to worst & remove outliers
+   
+    }
 }
