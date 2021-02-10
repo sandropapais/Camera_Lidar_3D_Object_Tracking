@@ -162,32 +162,97 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
     cv::Point2f posPrevKpt, posCurrKpt;
     size_t bbCountPrev = prevFrame.boundingBoxes.size();
     size_t bbCountCurr = currFrame.boundingBoxes.size();
-    int boxIDPrev = -1;
-    int boxIDCurr = -1;
+    int boxIDPrev, boxIDCurr;
+    cv::Rect smallerRoi;
+    double shrinkFactor = 0.10;
+    int kptInBoxPrevCount, kptInBoxCurrCount;
+    std::multimap<int, int> bbMatches;
 
     // loop over all keypoint matches
     for (auto it = matches.begin(); it != matches.end(); ++it)
     {
         posPrevKpt = prevFrame.keypoints[it->queryIdx].pt;
         posCurrKpt = currFrame.keypoints[it->trainIdx].pt;
+        std::cout << "prev pt:(" << posPrevKpt.x << "," << posPrevKpt.y << "), curr pt:(" << posCurrKpt.x << "," << posCurrKpt.y << ")," << endl;
 
-        // check if points are inside any bbs
-        for (size_t i = 0; i < bbCountPrev; i++)
+        kptInBoxPrevCount = 0;
+        kptInBoxCurrCount = 0;
+
+        // loop over previous bounding boxed
+        for (vector<BoundingBox>::iterator it2 = prevFrame.boundingBoxes.begin(); it2 != prevFrame.boundingBoxes.end(); ++it2)
         {
-            /* code */
+            // shrink bounding box slightly to avoid outliers
+            smallerRoi.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
+            smallerRoi.y = (*it2).roi.y + shrinkFactor * (*it2).roi.height / 2.0;
+            smallerRoi.width = (*it2).roi.width * (1 - shrinkFactor);
+            smallerRoi.height = (*it2).roi.height * (1 - shrinkFactor);
+
+            // check if keypoint is inside bounding box
+            if (smallerRoi.contains(posPrevKpt))
+            {
+                boxIDPrev = (*it2).boxID;
+                kptInBoxPrevCount += 1;
+                std::cout << "true 1, count:" << kptInBoxPrevCount << " id:" << boxIDPrev << endl;
+            }
         }        
-        for (size_t i = 0; i < bbCountCurr; i++)
+        for (vector<BoundingBox>::iterator it2 = currFrame.boundingBoxes.begin(); it2 != currFrame.boundingBoxes.end(); ++it2)
         {
-            /* code */
+            // shrink bounding box slightly to avoid outliers
+            smallerRoi.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
+            smallerRoi.y = (*it2).roi.y + shrinkFactor * (*it2).roi.height / 2.0;
+            smallerRoi.width = (*it2).roi.width * (1 - shrinkFactor);
+            smallerRoi.height = (*it2).roi.height * (1 - shrinkFactor);
+
+            // check if keypoint is inside bounding box
+            if (smallerRoi.contains(posPrevKpt))
+            {
+                boxIDCurr = (*it2).boxID;
+                kptInBoxCurrCount += 1;
+                std::cout << "true 2, count:" << kptInBoxCurrCount << " id:" << boxIDCurr << endl;
+            }
         }
         
-        // If both matched kpts are inside bbs then store bb IDs in map
-        if( boxIDPrev >= 0 && boxIDCurr >= 0)
+        // If both matched kpts are inside exactly one box, then store box IDs in map
+        if(kptInBoxPrevCount == 1 && kptInBoxCurrCount == 1)
         {
-            bbBestMatches.insert({boxIDPrev,boxIDCurr});
+            bbMatches.insert({boxIDPrev,boxIDCurr});
+        }   
+    }
+
+    // Cout number of map pairs & sort in order of best to worst & remove outliers
+    std::set<int> uniqueKeys;
+    for (auto const& pair: bbMatches) 
+    {
+        uniqueKeys.insert(pair.first);
+        std::cout << "{" << pair.first << "," << pair.second << "}\n";
+
+    }
+    for (auto const& pair: bbBestMatches) 
+    {
+        //std::cout << "{" << pair.first << "," << pair.second << "}\n";
+    }
+    //std::cout << bbBestMatches.size() << endl;
+    
+    //std::vector<int> uniqueVals;
+    int mmcount;
+    for (auto it1 : uniqueKeys)
+    {
+        mmcount = bbMatches.count(it1);
+        std::cout << "{" << it1 << ",-}, count:" << mmcount << "\n";
+        // loop through values for each unique key
+        std::multiset<int> keyValues;
+        std::set<int> keyValuesUnique;
+        for (auto it2=bbMatches.equal_range(it1).first; it2!=bbMatches.equal_range(it1).second; ++it2)
+        {
+            // do stuff with each value: (*it2).second;
+            keyValues.insert((*it2).second);
+            keyValuesUnique.insert((*it2).second);
+        }
+        for (auto it3 : keyValuesUnique)
+        {
+            std::cout << "{" << it1 << "," << it3 << "}, count:" << keyValues.count(it3) << "\n";
         }
 
-        // Cout number of map pairs & sort in order of best to worst & remove outliers
-   
     }
+
 }

@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <vector>
+#include <set>
 #include <opencv2/core.hpp>
 #include "dataStructures.h"
 
