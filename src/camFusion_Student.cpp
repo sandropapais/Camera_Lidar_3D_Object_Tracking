@@ -168,6 +168,7 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         if (kptInBoxCount == 2)
         {
             boundingBox.kptMatches.push_back(*it);
+            boundingBox.keypoints.push_back(kptsCurr[it->trainIdx]);
         }
     }
     // TODO: add additional filtering on matches to remove those far outside the mean motion of all points
@@ -176,7 +177,7 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
 void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, 
-                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
+                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC)
 {
     // compute distance ratios between all matched keypoints
     vector<double> distRatios; // stores the distance ratios for all keypoints between curr. and prev. frame

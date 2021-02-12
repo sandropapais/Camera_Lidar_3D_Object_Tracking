@@ -261,7 +261,9 @@ int main(int argc, const char *argv[])
                     bVis = true;
                     if (bVis)
                     {
-                        cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
+                        cv::Mat visImg;
+                        cv::Mat srcImg = (dataBuffer.end() - 1)->cameraImg.clone();
+                        cv::drawKeypoints(srcImg, currBB->keypoints, visImg);
                         showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
                         cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height), cv::Scalar(0, 255, 0), 2);
                         
