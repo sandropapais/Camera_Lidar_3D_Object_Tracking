@@ -138,7 +138,39 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 // associate a given bounding box with the keypoints it contains
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
-    // ...
+    // goal: assign subset of kptMatches to boundingBox->kptMatches
+    double shrinkFactor = 0.10; // bounding box size reduction factor
+
+    // loop over all keypoint matches
+    for (auto it = kptMatches.begin(); it != kptMatches.end(); ++it)
+    {
+        // shrink bounding box slightly to avoid outliers
+        cv::Rect smallerRoi;
+        smallerRoi.x = boundingBox.roi.x + shrinkFactor * boundingBox.roi.width / 2.0;
+        smallerRoi.y = boundingBox.roi.y + shrinkFactor * boundingBox.roi.height / 2.0;
+        smallerRoi.width = boundingBox.roi.width * (1 - shrinkFactor);
+        smallerRoi.height = boundingBox.roi.height * (1 - shrinkFactor);
+
+        // check if both matched keypoint is inside bounding box, if so add to box hit counter
+        int kptInBoxCount = 0;
+        cv::Point2f posPrevKpt = kptsPrev[it->queryIdx].pt;
+        if (smallerRoi.contains(posPrevKpt))
+        {
+            kptInBoxCount += 1;
+        }
+        cv::Point2f posCurrKpt = kptsCurr[it->trainIdx].pt;
+        if (smallerRoi.contains(posCurrKpt))
+        {
+            kptInBoxCount += 1;
+        }
+
+        // select match candidates with prev and curr kpts inside bounding box
+        if (kptInBoxCount == 2)
+        {
+            boundingBox.kptMatches.push_back(*it);
+        }
+    }
+    // TODO: add additional filtering on matches to remove those far outside the mean motion of all points
 }
 
 
@@ -146,7 +178,61 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, 
                       std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
-    // ...
+    // compute distance ratios between all matched keypoints
+    vector<double> distRatios; // stores the distance ratios for all keypoints between curr. and prev. frame
+    for (auto it1 = kptMatches.begin(); it1 != kptMatches.end() - 1; ++it1)
+    { // outer keypoint loop
+
+        // get current keypoint and its matched partner in the prev. frame
+        cv::KeyPoint kpOuterCurr = kptsCurr.at(it1->trainIdx);
+        cv::KeyPoint kpOuterPrev = kptsPrev.at(it1->queryIdx);
+
+        for (auto it2 = kptMatches.begin() + 1; it2 != kptMatches.end(); ++it2)
+        { // inner keypoint loop
+
+            double minDist = 100.0; // min. required distance
+
+            // get next keypoint and its matched partner in the prev. frame
+            cv::KeyPoint kpInnerCurr = kptsCurr.at(it2->trainIdx);
+            cv::KeyPoint kpInnerPrev = kptsPrev.at(it2->queryIdx);
+
+            // compute distances and distance ratios
+            double distCurr = cv::norm(kpOuterCurr.pt - kpInnerCurr.pt);
+            double distPrev = cv::norm(kpOuterPrev.pt - kpInnerPrev.pt);
+
+            if (distPrev > std::numeric_limits<double>::epsilon() && distCurr >= minDist)
+            { // avoid division by zero
+
+                double distRatio = distCurr / distPrev;
+                distRatios.push_back(distRatio);
+            }
+        } // eof inner loop over all matched kpts
+    }     // eof outer loop over all matched kpts
+
+    // only continue if list of distance ratios is not empty
+    if (distRatios.size() == 0)
+    {
+        TTC = NAN;
+        return;
+    }
+
+    // compute mean and median distance ratios
+    double meanDistRatio = std::accumulate(distRatios.begin(), distRatios.end(), 0.0) / distRatios.size();
+    std::sort(distRatios.begin(), distRatios.end());
+    double medianDistRatio;
+    if (distRatios.size() % 2 != 0) // Odd array size median case
+    {
+        medianDistRatio = distRatios.at((distRatios.size()+1)/2);
+    }
+    else // Even array size median case
+    {
+        medianDistRatio = ( distRatios.at((distRatios.size())/2+1) +  distRatios.at(distRatios.size()/2) )/2;
+    }
+    // printf("[Debug] median = %f, mean = %f \n", medianDistRatio, meanDistRatio);
+
+    // compute camera-based TTC from distance ratios
+    double dT = 1 / frameRate;
+    TTC = -dT / (1 - medianDistRatio);
 }
 
 
