@@ -34,19 +34,19 @@ void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<Li
         pt.y = Y.at<double>(1, 0) / Y.at<double>(2, 0); 
 
         vector<vector<BoundingBox>::iterator> enclosingBoxes; // pointers to all bounding boxes which enclose the current Lidar point
-        for (vector<BoundingBox>::iterator it2 = boundingBoxes.begin(); it2 != boundingBoxes.end(); ++it2)
+        for (vector<BoundingBox>::iterator itVal = boundingBoxes.begin(); itVal != boundingBoxes.end(); ++itVal)
         {
             // shrink current bounding box slightly to avoid having too many outlier points around the edges
             cv::Rect smallerBox;
-            smallerBox.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
-            smallerBox.y = (*it2).roi.y + shrinkFactor * (*it2).roi.height / 2.0;
-            smallerBox.width = (*it2).roi.width * (1 - shrinkFactor);
-            smallerBox.height = (*it2).roi.height * (1 - shrinkFactor);
+            smallerBox.x = (*itVal).roi.x + shrinkFactor * (*itVal).roi.width / 2.0;
+            smallerBox.y = (*itVal).roi.y + shrinkFactor * (*itVal).roi.height / 2.0;
+            smallerBox.width = (*itVal).roi.width * (1 - shrinkFactor);
+            smallerBox.height = (*itVal).roi.height * (1 - shrinkFactor);
 
             // check wether point is within current bounding box
             if (smallerBox.contains(pt))
             {
-                enclosingBoxes.push_back(it2);
+                enclosingBoxes.push_back(itVal);
             }
 
         } // eof loop over all bounding boxes
@@ -80,11 +80,11 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
         // plot Lidar points into top view image
         int top=1e8, left=1e8, bottom=0.0, right=0.0; 
         float xwmin=1e8, ywmin=1e8, ywmax=-1e8;
-        for (auto it2 = it1->lidarPoints.begin(); it2 != it1->lidarPoints.end(); ++it2)
+        for (auto itVal = it1->lidarPoints.begin(); itVal != it1->lidarPoints.end(); ++itVal)
         {
             // world coordinates
-            float xw = (*it2).x; // world position in m with x facing forward from sensor
-            float yw = (*it2).y; // world position in m with y facing left from sensor
+            float xw = (*itVal).x; // world position in m with x facing forward from sensor
+            float yw = (*itVal).y; // world position in m with y facing left from sensor
             xwmin = xwmin<xw ? xwmin : xw;
             ywmin = ywmin<yw ? ywmin : yw;
             ywmax = ywmax>yw ? ywmax : yw;
@@ -153,66 +153,95 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
-    // ...
+    // auxiliary variables
+    double dT = 1/frameRate; // time between two measurements in seconds
+    // double laneWidth = 4.0; // assumed width of the ego lane
+
+    // find closest distance to Lidar points within ego lane
+    double minXPrev = 1e9, minXCurr = 1e9;
+    for (auto it = lidarPointsPrev.begin(); it != lidarPointsPrev.end(); ++it)
+    {
+        //if (it->y < laneWidth/2 && it->y > -laneWidth/2)
+        //{
+            minXPrev = minXPrev > it->x ? it->x : minXPrev;
+        //}
+    }
+
+    for (auto it = lidarPointsCurr.begin(); it != lidarPointsCurr.end(); ++it)
+    {
+        //if (it->y < laneWidth/2 && it->y > -laneWidth/2)
+        //{
+            minXCurr = minXCurr > it->x ? it->x : minXCurr;
+        //}
+    }
+
+    // compute TTC from both measurements
+    double relVel = (minXPrev - minXCurr) / dT;
+    if (relVel > 0)
+    {
+        TTC = minXCurr / relVel;
+    }
+    else // no collision case
+    {
+        TTC = -1;
+    }
+    
 }
 
 
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
 {
-    cv::Point2f posPrevKpt, posCurrKpt;
-    size_t bbCountPrev = prevFrame.boundingBoxes.size();
-    size_t bbCountCurr = currFrame.boundingBoxes.size();
-    int boxIDPrev, boxIDCurr;
-    cv::Rect smallerRoi;
-    double shrinkFactor = 0.10;
-    int kptInBoxPrevCount, kptInBoxCurrCount;
     std::multimap<int, int> bbMatches;
+
+    double shrinkFactor = 0.10; // bounding box size reduction factor
+    int featureMatchesThresh = 10; // minimum number of feature matches inside previous and current box
+    int verboseFlg = 0; // flag to debug info
 
     // loop over all keypoint matches
     for (auto it = matches.begin(); it != matches.end(); ++it)
     {
-        posPrevKpt = prevFrame.keypoints[it->queryIdx].pt;
-        posCurrKpt = currFrame.keypoints[it->trainIdx].pt;
-        std::cout << "prev pt:(" << posPrevKpt.x << "," << posPrevKpt.y << "), curr pt:(" << posCurrKpt.x << "," << posCurrKpt.y << ")," << endl;
-
-        kptInBoxPrevCount = 0;
-        kptInBoxCurrCount = 0;
+        int kptInBoxPrevCount = 0;
+        int kptInBoxCurrCount = 0;
+        int boxIDPrev, boxIDCurr;
 
         // loop over previous bounding boxed
-        for (vector<BoundingBox>::iterator it2 = prevFrame.boundingBoxes.begin(); it2 != prevFrame.boundingBoxes.end(); ++it2)
+        for (vector<BoundingBox>::iterator itVal = prevFrame.boundingBoxes.begin(); itVal != prevFrame.boundingBoxes.end(); ++itVal)
         {
             // shrink bounding box slightly to avoid outliers
-            smallerRoi.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
-            smallerRoi.y = (*it2).roi.y + shrinkFactor * (*it2).roi.height / 2.0;
-            smallerRoi.width = (*it2).roi.width * (1 - shrinkFactor);
-            smallerRoi.height = (*it2).roi.height * (1 - shrinkFactor);
+            cv::Rect smallerRoi;
+            smallerRoi.x = (*itVal).roi.x + shrinkFactor * (*itVal).roi.width / 2.0;
+            smallerRoi.y = (*itVal).roi.y + shrinkFactor * (*itVal).roi.height / 2.0;
+            smallerRoi.width = (*itVal).roi.width * (1 - shrinkFactor);
+            smallerRoi.height = (*itVal).roi.height * (1 - shrinkFactor);
 
-            // check if keypoint is inside bounding box
+            // check if keypoint is inside bounding box, if so add to box hit counter
+            cv::Point2f posPrevKpt = prevFrame.keypoints[it->queryIdx].pt;
             if (smallerRoi.contains(posPrevKpt))
             {
-                boxIDPrev = (*it2).boxID;
+                boxIDPrev = (*itVal).boxID;
                 kptInBoxPrevCount += 1;
-                std::cout << "true 1, count:" << kptInBoxPrevCount << " id:" << boxIDPrev << endl;
             }
         }        
-        for (vector<BoundingBox>::iterator it2 = currFrame.boundingBoxes.begin(); it2 != currFrame.boundingBoxes.end(); ++it2)
+        // loop over current bounding boxes
+        for (vector<BoundingBox>::iterator itVal = currFrame.boundingBoxes.begin(); itVal != currFrame.boundingBoxes.end(); ++itVal)
         {
             // shrink bounding box slightly to avoid outliers
-            smallerRoi.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
-            smallerRoi.y = (*it2).roi.y + shrinkFactor * (*it2).roi.height / 2.0;
-            smallerRoi.width = (*it2).roi.width * (1 - shrinkFactor);
-            smallerRoi.height = (*it2).roi.height * (1 - shrinkFactor);
+            cv::Rect smallerRoi;
+            smallerRoi.x = (*itVal).roi.x + shrinkFactor * (*itVal).roi.width / 2.0;
+            smallerRoi.y = (*itVal).roi.y + shrinkFactor * (*itVal).roi.height / 2.0;
+            smallerRoi.width = (*itVal).roi.width * (1 - shrinkFactor);
+            smallerRoi.height = (*itVal).roi.height * (1 - shrinkFactor);
 
-            // check if keypoint is inside bounding box
-            if (smallerRoi.contains(posPrevKpt))
+            // check if keypoint is inside bounding box, if so add to box hit counter
+            cv::Point2f posCurrKpt = currFrame.keypoints[it->trainIdx].pt;
+            if (smallerRoi.contains(posCurrKpt))
             {
-                boxIDCurr = (*it2).boxID;
+                boxIDCurr = (*itVal).boxID;
                 kptInBoxCurrCount += 1;
-                std::cout << "true 2, count:" << kptInBoxCurrCount << " id:" << boxIDCurr << endl;
             }
         }
         
-        // If both matched kpts are inside exactly one box, then store box IDs in map
+        // If both matched kpts are inside exactly one box, then store box IDs in multimap
         if(kptInBoxPrevCount == 1 && kptInBoxCurrCount == 1)
         {
             bbMatches.insert({boxIDPrev,boxIDCurr});
@@ -220,39 +249,62 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
     }
 
     // Cout number of map pairs & sort in order of best to worst & remove outliers
+
+    // find set of unique keys (prev box ID) in multimap 
     std::set<int> uniqueKeys;
     for (auto const& pair: bbMatches) 
     {
         uniqueKeys.insert(pair.first);
-        std::cout << "{" << pair.first << "," << pair.second << "}\n";
-
     }
-    for (auto const& pair: bbBestMatches) 
-    {
-        //std::cout << "{" << pair.first << "," << pair.second << "}\n";
-    }
-    //std::cout << bbBestMatches.size() << endl;
     
-    //std::vector<int> uniqueVals;
-    int mmcount;
-    for (auto it1 : uniqueKeys)
+    // debug printout for box match candidates
+    if (verboseFlg == 1)
     {
-        mmcount = bbMatches.count(it1);
-        std::cout << "{" << it1 << ",-}, count:" << mmcount << "\n";
-        // loop through values for each unique key
+        std::cout << "[DEBUG] Bounding box match candidates: {BoxIDPrev,BoxIDCurr}, count: # features matched \n";
+    }
+
+    // loop through unique keys (prev box ID)
+    for (auto itKey : uniqueKeys)
+    {
+        // loop through values (curr box ID) for each unique key (prev box ID)
         std::multiset<int> keyValues;
         std::set<int> keyValuesUnique;
-        for (auto it2=bbMatches.equal_range(it1).first; it2!=bbMatches.equal_range(it1).second; ++it2)
+        for (auto itVal = bbMatches.equal_range(itKey).first ; itVal != bbMatches.equal_range(itKey).second ; ++itVal)
         {
-            // do stuff with each value: (*it2).second;
-            keyValues.insert((*it2).second);
-            keyValuesUnique.insert((*it2).second);
-        }
-        for (auto it3 : keyValuesUnique)
-        {
-            std::cout << "{" << it1 << "," << it3 << "}, count:" << keyValues.count(it3) << "\n";
+            // do stuff with each value: (*itVal).second;
+            keyValues.insert((*itVal).second);
+            keyValuesUnique.insert((*itVal).second);
         }
 
+        int count_max = 0;
+        int value_max = 0;
+        for (auto itValUniq : keyValuesUnique)
+        {
+            int count = keyValues.count(itValUniq);
+            if (count > count_max)
+            {
+                count_max = count;
+                value_max = itValUniq;
+            }
+            if (verboseFlg == 1)
+            {
+                std::cout << "{" << itKey << "," << itValUniq << "}, count:" << count << "\n";
+            }
+        }
+        if (count_max > featureMatchesThresh)
+        {
+            bbBestMatches.insert({itKey,value_max});
+        }
+    }
+
+    // debug printout for successful box matches
+    if (verboseFlg == 1)
+    {
+        std::cout << "[DEBUG] Bounding box matches selected: {BoxIDPrev,BoxIDCurr}\n";
+        for (auto const& pair: bbBestMatches) 
+        {
+            std::cout << "{" << pair.first << "," << pair.second << "}\n";
+        }
     }
 
 }
