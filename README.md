@@ -2,7 +2,7 @@
 
 This project encorporates
 1. Keypoint detectors, descriptors, and methods to match them between successive images
-2. Detecting objects in an image using the YOLO deep-learning framework. 
+2. Detecting objects in an image using deep learning via YOLOv3. 
 3. Mapping camera image data with Lidar points in 3D space to identify 3D objects.
 4. Match 3D objects over time by using keypoint correspondences.
 5. Compute a time-to-collision (TTC) with objects based on Lidar measurements.
